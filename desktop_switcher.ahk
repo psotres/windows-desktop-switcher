@@ -16,6 +16,14 @@ global IsWindowOnDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDes
 global MoveWindowToDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "MoveWindowToDesktopNumber", "Ptr")
 global GoToDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "GoToDesktopNumber", "Ptr")
 
+; ADDITIONS FROM https://github.com/pmb6tz/windows-desktop-switcher/issues/55#issuecomment-624690947
+global IsPinnedWindowProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "IsPinnedWindow", "Ptr")
+global PinWindowProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "PinWindow", "Ptr")
+global UnPinWindowProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "UnPinWindow", "Ptr")
+global IsPinnedAppProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "IsPinnedApp", "Ptr")
+global PinAppProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "PinApp", "Ptr")
+global UnPinAppProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "UnPinApp", "Ptr")
+
 ; Main
 SetKeyDelay, 75
 mapDesktopsFromRegistry()
@@ -42,7 +50,7 @@ mapDesktopsFromRegistry()
         if ErrorLevel {
             RegRead, CurrentDesktopId, HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\%SessionId%\VirtualDesktops, CurrentVirtualDesktop
         }
-        
+
         if (CurrentDesktopId) {
             IdLength := StrLen(CurrentDesktopId)
         }
@@ -233,4 +241,107 @@ deleteVirtualDesktop()
     DesktopCount--
     CurrentDesktop--
     OutputDebug, [delete] desktops: %DesktopCount% current: %CurrentDesktop%
+}
+
+
+; ADDITIONS FROM https://github.com/pmb6tz/windows-desktop-switcher/issues/55#issuecomment-624690947
+
+_GetCurrentWindowID() {
+    WinGet, activeHwnd, ID, A
+    return activeHwnd
+}
+
+_GetCurrentWindowTitle() {
+    WinGetTitle, activeHwnd, A
+    return activeHwnd
+}
+
+OnTogglePinWindowPress() {
+    windowID := _GetCurrentWindowID()
+    windowTitle := _GetCurrentWindowTitle()
+    if (_GetIsWindowPinned(windowID)) {
+        _UnpinWindow(windowID)
+        _ShowTooltipForUnpinnedWindow(windowTitle)
+    }
+    else {
+        _PinWindow(windowID)
+        _ShowTooltipForPinnedWindow(windowTitle)
+    }
+}
+
+OnTogglePinAppPress() {
+    windowID := _GetCurrentWindowID()
+    windowTitle := _GetCurrentWindowTitle()
+    if (_GetIsAppPinned(windowID)) {
+        _UnpinApp(windowID)
+        _ShowTooltipForUnpinnedApp(windowTitle)
+    }
+    else {
+        _PinApp(windowID)
+        _ShowTooltipForPinnedApp(windowTitle)
+    }
+}
+
+_PinWindow(windowID:="") {
+    _CallWindowProc(PinWindowProc, windowID)
+}
+
+_UnpinWindow(windowID:="") {
+    _CallWindowProc(UnpinWindowProc, windowID)
+}
+
+_GetIsWindowPinned(windowID:="") {
+    return _CallWindowProc(IsPinnedWindowProc, windowID)
+}
+
+_PinApp(windowID:="") {
+    _CallWindowProc(PinAppProc, windowID)
+}
+
+_UnpinApp(windowID:="") {
+    _CallWindowProc(UnpinAppProc, windowID)
+}
+
+_GetIsAppPinned(windowID:="") {
+    return _CallWindowProc(IsPinnedAppProc, windowID)
+}
+
+_CallWindowProc(proc, window:="") {
+    if (window == "") {
+        window := _GetCurrentWindowID()
+    }
+    return DllCall(proc, UInt, window)
+}
+
+_notif(txt, title:="") {
+    HideTrayTip()
+    TrayTip, %title%, %txt%, 1
+}
+
+HideTrayTip() {
+    TrayTip  ; Attempt to hide it the normal way.
+    if SubStr(A_OSVersion,1,3) = "10." {
+        Menu Tray, NoIcon
+        Sleep 200  ; It may be necessary to adjust this sleep.
+        Menu Tray, Icon
+    }
+}
+_ShowTooltipForPinnedWindow(windowTitle) {
+    _notif(_TruncateString(windowTitle, 100), "Pinned Window")
+}
+
+_ShowTooltipForUnpinnedWindow(windowTitle) {
+    _notif(_TruncateString(windowTitle, 100), "Unpinned Window")
+}
+
+_ShowTooltipForPinnedApp(windowTitle) {
+    _notif(_TruncateString(windowTitle, 100), "Pinned App")
+}
+
+_ShowTooltipForUnpinnedApp(windowTitle) {
+    _notif(_TruncateString(windowTitle, 100), "Unpinned App")
+}
+
+_TruncateString(string:="", n:=10) {
+    return (StrLen(string) > n ? SubStr(string, 1, n-3) . "..." : string)
 }
